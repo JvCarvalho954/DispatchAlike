@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dispatch — Drag & Drop de Heróis</title>
+<style>
+  :root{--bg:#0f1724;--card:rgba(255,255,255,0.03);--muted:#94a3b8;--accent:#7dd3fc;--gold:#facc15;}
+  body{font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6eef8;margin:0;padding:20px;}
+  .app{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:320px 1fr 320px;gap:18px;}
+  .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+  h2{margin:0 0 12px;font-size:18px;color:var(--accent);}
+  .hero{display:flex;gap:10px;align-items:center;padding:8px;border-radius:8px;margin-bottom:10px;background:rgba(255,255,255,0.02);cursor:grab;}
+  .hero[draggable="true"]:active{cursor:grabbing;}
+  .hero.disabled{opacity:0.45;filter:grayscale(.6);cursor:not-allowed;}
+  .avatar{width:48px;height:48px;border-radius:8px;background:#111;display:flex;align-items:center;justify-content:center;font-weight:700;}
+  .meta{flex:1;}
+  .tag{display:inline-block;font-size:12px;padding:3px 8px;border-radius:999px;background:rgba(125,211,252,0.06);color:var(--accent);margin-right:6px;}
+  .xpbar{height:6px;border-radius:3px;background:#0b1220;margin-top:6px;overflow:hidden;}
+  .xpfill{height:100%;background:#34d399;}
+  button{background:transparent;border:1px solid rgba(255,255,255,0.08);padding:6px 10px;border-radius:8px;color:var(--accent);cursor:pointer;}
+  .incident{border-radius:10px;padding:12px;margin-bottom:12px;background:rgba(255,255,255,0.02);}
+  .assign-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .slot{width:110px;height:56px;border-radius:8px;background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center;border:2px dashed rgba(255,255,255,0.04);position:relative;}
+  .slot.dragover{border-color:rgba(125,211,252,0.5);background:rgba(125,211,252,0.03);}
+  .assigned{display:flex;gap:8px;align-items:center;padding:6px;border-radius:6px;background:rgba(255,255,255,0.02);width:100%;}
+  .assigned .small-avatar{width:34px;height:34px;border-radius:6px;background:#111;display:flex;align-items:center;justify-content:center;font-weight:700;}
+  .assigned .name{font-size:13px;color:#e6eef8;flex:1;}
+  .remove-assigned{font-size:14px;color:#ef4444;cursor:pointer;padding-left:6px;}
+  .timerbar{height:8px;border-radius:4px;margin-top:8px;overflow:hidden;background:#07101a;}
+  .timer-inner{height:100%;transition:width 1s linear;}
+  .active-section{margin-top:14px;}
+  .log{height:300px;overflow:auto;background:rgba(0,0,0,0.12);padding:10px;border-radius:8px;font-size:13px;}
+  .small{font-size:13px;color:var(--muted);}
+  .rep-bar{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;margin-bottom:12px;}
+  .rep-value{color:var(--gold);font-weight:700;}
+  .center-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .hint{font-size:12px;color:var(--muted);margin-bottom:8px;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <h2>Heróis</h2>
+    <div id="heroesList"></div>
+    <div class="hint">Arraste heróis para os slots das missões disponíveis.</div>
+  </div>
+
+  <div class="card">
+    <div class="center-top">
+      <h2>Centro de Despacho</h2>
+      <div class="rep-bar"> <div class="small">Reputação Atual</div> <div id="repValue" class="rep-value">10</div></div>
+    </div>
+
+    <div>
+      <h3 style="color:#34d399;margin:0 0 8px;">📋 Missões disponíveis</h3>
+      <div id="incidentsList"></div>
+    </div>
+
+    <div class="active-section">
+      <h3 style="color:#facc15;margin:12px 0 8px;">🚀 Missões em andamento</h3>
+      <div id="activeMissionsList"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Registro</h2>
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<script>
+/* Dispatch com Drag & Drop
+   - drag herói -> drop em slot
+   - slots armazenados em incidents[].assigned (array)
+   - dispatch usa incidents[].assigned
+   - mantém timers, cooldown, XP, reputação, reposição após 15s
+*/
+
+const now = ()=>Math.floor(Date.now()/1000);
+let time = now();
+let reputation = 10;
+let log = [];
+
+const heroes = [
+  {id:'h1',name:'Anchor',rating:78,tags:['brute','tank'],cooldown:0,level:1,xp:0},
+  {id:'h2',name:'Flicker',rating:65,tags:['recon','speed'],cooldown:0,level:1,xp:0},
+  {id:'h3',name:'Siren',rating:72,tags:['support','heal'],cooldown:0,level:1,xp:0},
+  {id:'h4',name:'Volt',rating:58,tags:['tech','ranged'],cooldown:0,level:1,xp:0},
+  {id:'h5',name:'Shade',rating:66,tags:['stealth','recon'],cooldown:0,level:1,xp:0},
+  {id:'h6',name:'Blaze',rating:80,tags:['brute','fire'],cooldown:0,level:1,xp:0},
+];
+
+const pool = [
+  {title:'Colapso estrutural',threat:3,required:'brute'},
+  {title:'Roubo em andamento',threat:2,required:'recon'},
+  {title:'Ataque químico',threat:3,required:'tech'},
+  {title:'Resgate em incêndio',threat:4,required:'brute'},
+  {title:'Sequestro relâmpago',threat:2,required:'stealth'},
+  {title:'Vazamento tóxico',threat:3,required:'tech'},
+  {title:'Motim urbano',threat:1,required:'support'},
+  {title:'Sabotagem elétrica',threat:3,required:'tech'},
+  {title:'Fuga de vilão',threat:4,required:'recon'}
+];
+
+let incidents = [];
+let activeMissions = [];
+let nextIncidentId = 1;
+
+/* helpers */
+function getIncidentDuration(threat){
+  if(threat>=4) return 15;
+  if(threat===3) return 20;
+  if(threat===2) return 30;
+  return 40;
+}
+function getTimerColor(threat){
+  if(threat>=4) return '#ef4444';
+  if(threat===3) return '#f97316';
+  if(threat===2) return '#facc15';
+  return '#34d399';
+}
+const el = id => document.getElementById(id);
+function addLog(txt,cls=''){ log.unshift({t:new Date().toLocaleTimeString(),txt,cls}); renderLog(); }
+function renderLog(){ el('log').innerHTML = log.map(l=>`<div><span class="${l.cls}">[${l.t}]</span> ${l.txt}</div>`).join(''); }
+function xpNeeded(lv){ return 50 + lv*50; }
+function addXP(hero,amount){
+  hero.xp += amount;
+  const needed = xpNeeded(hero.level);
+  if(hero.xp >= needed){
+    hero.xp -= needed;
+    hero.level++;
+    hero.rating += 3;
+    addLog(`⭐ ${hero.name} subiu para o nível ${hero.level}!`,'levelup');
+  }
+}
+function synergyBonus(team){
+  const all = team.flatMap(h=>h.tags);
+  let bonus = 1;
+  const unique = [...new Set(all)];
+  if(unique.length === team.length*2) bonus += .10;
+  const dup = all.length - unique.length;
+  if(dup>=1) bonus += .10;
+  const has = t => all.includes(t);
+  if(has('brute')&&has('support')&&has('heal')) bonus += .20;
+  if(has('tech')&&has('recon')&&has('stealth')) bonus += .15;
+  return Math.min(bonus,1.25);
+}
+
+/* cria um incidente novo */
+function newIncident(){
+  const pick = pool[Math.floor(Math.random()*pool.length)];
+  const id = `inc${nextIncidentId++}`;
+  return {
+    id,
+    title: pick.title,
+    threat: pick.threat,
+    required: pick.required,
+    start: now(),
+    duration: getIncidentDuration(pick.threat),
+    assigned: [null,null,null] // 3 slots (null ou hero.id)
+  };
+}
+
+/* manter herói marcado como atribuído para bloquear em outros slots */
+function isHeroAssigned(heroId){
+  // checar incidents.available assigned + activeMissions teams
+  for(const inc of incidents){
+    if(inc.assigned && inc.assigned.includes(heroId)) return true;
+  }
+  for(const m of activeMissions){
+    if(m.team && m.team.some(h=>h.id===heroId)) return true;
+  }
+  return false;
+}
+
+/* RENDER HEROES (draggable se disponível) */
+function renderHeroes(){
+  el('heroesList').innerHTML = heroes.map(h=>{
+    const cdLeft = Math.max(0, h.cooldown - time);
+    const assigned = isHeroAssigned(h.id);
+    const disabled = cdLeft>0 || assigned;
+    const pct = Math.min(100, (h.xp / xpNeeded(h.level)) * 100);
+    const initials = h.name[0];
+    return `<div class="hero ${disabled?'disabled':''}" draggable="${disabled?false:true}" data-hero="${h.id}" id="hero-${h.id}">
+      <div class="avatar">${initials}</div>
+      <div class="meta">
+        <b>${h.name}</b> <div class="small">LV ${h.level} • Rating ${h.rating}</div>
+        <div style="margin-top:6px" class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div>
+        ${cdLeft>0?`<div class="small">⏳ Cooldown: ${cdLeft}s</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  // attach drag listeners
+  document.querySelectorAll('.hero[draggable="true"]').forEach(elm=>{
+    elm.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('text/plain', elm.dataset.hero);
+      // set drag image
+      const img = document.createElement('div'); img.style.padding='6px'; img.style.background='#111'; img.style.color='#fff'; img.style.borderRadius='6px';
+      img.textContent = elm.querySelector('b').textContent;
+      document.body.appendChild(img);
+      e.dataTransfer.setDragImage(img, -10, -10);
+      setTimeout(()=>document.body.removeChild(img),0);
+    });
+  });
+}
+
+/* render de incidents disponíveis — slots com drop */
+function renderIncidents(){
+  // build HTML
+  el('incidentsList').innerHTML = incidents.map(inc=>{
+    const elapsed = now() - inc.start;
+    const pct = Math.max(0,100 - (elapsed / inc.duration) * 100);
+    const color = getTimerColor(inc.threat);
+    const slotsHtml = inc.assigned.map((aid,idx)=>{
+      if(aid){
+        const hero = heroes.find(h=>h.id===aid);
+        return `<div class="slot assigned" data-slot="${idx}" data-incident="${inc.id}">
+          <div style="display:flex;align-items:center;gap:8px;width:100%;">
+            <div class="small-avatar">${hero.name[0]}</div>
+            <div class="name">${hero.name}</div>
+            <div class="remove-assigned" data-incident="${inc.id}" data-slot="${idx}">✖</div>
+          </div>
+        </div>`;
+      } else {
+        return `<div class="slot empty-slot" data-slot="${idx}" data-incident="${inc.id}">Arraste aqui</div>`;
+      }
+    }).join('');
+    return `<div class="incident" id="${inc.id}">
+      <b>${inc.title}</b>
+      <div class="small">Ameaça ${inc.threat} • Requer: ${inc.required}</div>
+      <div class="timerbar"><div class="timer-inner" style="width:${pct}%;background:${color};"></div></div>
+      <div class="assign-row">${slotsHtml}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button onclick="dispatchTeam('${inc.id}')">Enviar equipe</button>
+        <button onclick="clearSlots('${inc.id}')">Limpar slots</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // attach drop listeners
+  document.querySelectorAll('.slot').forEach(slot=>{
+    slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('dragover'); });
+    slot.addEventListener('dragleave', e=>{ slot.classList.remove('dragover'); });
+    slot.addEventListener('drop', e=>{
+      e.preventDefault(); slot.classList.remove('dragover');
+      const heroId = e.dataTransfer.getData('text/plain');
+      const incId = slot.dataset.incident;
+      const slotIndex = Number(slot.dataset.slot);
+      tryAssignHeroToSlot(heroId, incId, slotIndex);
+    });
+  });
+
+  // attach remove assigned handlers
+  document.querySelectorAll('.remove-assigned').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const incId = btn.dataset.incident;
+      const idx = Number(btn.dataset.slot);
+      unassignSlot(incId, idx);
+    });
+  });
+}
+
+/* tryAssign: valida disponibilidade e aplica */
+function tryAssignHeroToSlot(heroId, incId, slotIdx){
+  if(!heroId) return;
+  const hero = heroes.find(h=>h.id===heroId);
+  if(!hero) return;
+  if(hero.cooldown > time){ addLog(`Herói ${hero.name} está em cooldown.`,`fail`); return; }
+  if(isHeroAssigned(heroId)){ addLog(`Herói ${hero.name} já está atribuído.`,`fail`); return; }
+  const inc = incidents.find(i=>i.id===incId);
+  if(!inc) return;
+  // assign
+  inc.assigned[slotIdx] = heroId;
+  renderAll();
+}
+
+/* remover de slot */
+function unassignSlot(incId, idx){
+  const inc = incidents.find(i=>i.id===incId);
+  if(!inc) return;
+  inc.assigned[idx] = null;
+  renderAll();
+}
+
+/* botão Limpar */
+function clearSlots(incId){
+  const inc = incidents.find(i=>i.id===incId);
+  if(!inc) return;
+  inc.assigned = [null,null,null];
+  renderAll();
+}
+
+/* dispatch: cria missão ativa com team objects (hero refs) e chance */
+function dispatchTeam(incId){
+  const inc = incidents.find(i=>i.id===incId);
+  if(!inc) return;
+  const assigned = inc.assigned.map(id => id ? heroes.find(h=>h.id===id) : null).filter(Boolean);
+  if(assigned.length < 1){ alert('Coloque ao menos 1 herói nos slots antes de enviar.'); return; }
+  // calcular chance
+  const avgRating = assigned.reduce((a,b)=>a+b.rating,0) / assigned.length;
+  const synergy = synergyBonus(assigned);
+  const reqMatch = assigned.some(h=>h.tags.includes(inc.required)) ? 1.2 : 0.9;
+  let chance = (avgRating/100) * synergy * reqMatch * (1 - inc.threat * 0.08);
+  chance = Math.max(0.05, Math.min(0.98, chance));
+  // mover para ativas
+  activeMissions.push({
+    id: inc.id,
+    title: inc.title,
+    threat: inc.threat,
+    start: now(),
+    duration: inc.duration,
+    team: assigned.map(h=>({id:h.id,name:h.name,rating:h.rating})),
+    chance
+  });
+  // remover incident disponível
+  incidents = incidents.filter(i=>i.id !== inc.id);
+  renderAll();
+}
+
+/* completar missão em andamento */
+function completeMission(m){
+  const success = Math.random() < m.chance;
+  const xpGain = m.threat * 10;
+  const cd = 5 + m.threat * 10;
+  // aplicar cooldown em heróis (referencia por id)
+  m.team.forEach(th => {
+    const h = heroes.find(x=>x.id===th.id);
+    if(h) h.cooldown = time + cd;
+});
+  if(success){
+    reputation += 3 + m.threat;
+    addLog(`✅ "${m.title}" concluída com sucesso! (chance ${(m.chance*100).toFixed(0)}%)`,'success');
+    m.team.forEach(th => { const h = heroes.find(x=>x.id===th.id); if(h) addXP(h,xpGain); });
+  } else {
+    reputation -= 3;
+    addLog(`❌ "${m.title}" falhou! (chance ${(m.chance*100).toFixed(0)}%)`,'fail');
+    m.team.forEach(th => { const h = heroes.find(x=>x.id===th.id); if(h) addXP(h,Math.floor(xpGain/2)); });
+  }
+  // remover da ativa
+  activeMissions = activeMissions.filter(x=>x.id!==m.id);
+  renderAll();
+  addIncidentAfterDelay();
+}
+
+/* timers: expiração de incidents e conclusão de missões ativas */
+function checkTimers(){
+  const nowSec = now();
+  // incidents expirados
+  incidents.filter(i=>nowSec - i.start >= i.duration).forEach(inc=>{
+    addLog(`⏰ "${inc.title}" expirou por falta de despacho.`,'fail');
+    reputation -= 2;
+    // remover e agendar novo spawn
+    incidents = incidents.filter(x=>x.id!==inc.id);
+    addIncidentAfterDelay();
+  });
+  // completar missões ativas
+  activeMissions.filter(m=>nowSec - m.start >= m.duration).forEach(completeMission);
+}
+
+/* spawn novo após delay de 15s */
+function addIncidentAfterDelay(){
+  setTimeout(()=>{
+    if(incidents.length < 3){
+      incidents.push(newIncident());
+      renderAll();
+      addLog('🆕 Nova missão entrou na lista.','');
+    }
+  },15000);
+}
+
+/* render ativos */
+function renderActiveMissions(){
+  el('activeMissionsList').innerHTML = activeMissions.map(m=>{
+    const elapsed = now() - m.start;
+    const pct = Math.max(0, 100 - (elapsed / m.duration) * 100);
+    const color = getTimerColor(m.threat);
+    return `<div class="incident">
+      <b>${m.title}</b>
+      <div class="small">Missão em andamento</div>
+      <div class="timerbar"><div class="timer-inner" style="width:${pct}%;background:${color};"></div></div>
+    </div>`;
+  }).join('') || '<div class="small">Nenhuma missão em andamento.</div>';
+}
+
+/* render geral */
+function renderReputation(){ el('repValue').textContent = reputation; }
+function renderAll(){
+  renderHeroes();
+  renderIncidents();
+  renderActiveMissions();
+  renderLog();
+  renderReputation();
+}
+
+/* loop principal */
+function tick(){
+  time = now();
+  checkTimers();
+  // re-render components; incidents mantém assigned[] portanto slots não perdem estado
+  renderAll();
+}
+setInterval(tick,1000);
+
+/* inicializar */
+for(let i=0;i<3;i++) incidents.push(newIncident());
+renderAll();
+
+/* expor funções para botões inline */
+window.dispatchTeam = dispatchTeam;
+window.clearSlots = clearSlots;
+</script>
+</body>
+</html>
