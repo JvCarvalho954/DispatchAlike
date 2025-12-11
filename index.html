@@ -3,16 +3,19 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Dispatch — Drag & Drop de Heróis</title>
+<title>Centro de despacho de heróis</title>
 <style>
   :root{--bg:#0f1724;--card:rgba(255,255,255,0.03);--muted:#94a3b8;--accent:#7dd3fc;--gold:#facc15;}
   body{font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6eef8;margin:0;padding:20px;}
   .app{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:320px 1fr 320px;gap:18px;}
   .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
   h2{margin:0 0 12px;font-size:18px;color:var(--accent);}
-  .hero{display:flex;gap:10px;align-items:center;padding:8px;border-radius:8px;margin-bottom:10px;background:rgba(255,255,255,0.02);cursor:grab;}
-  .hero[draggable="true"]:active{cursor:grabbing;}
-  .hero.disabled{opacity:0.45;filter:grayscale(.6);cursor:not-allowed;}
+  .hero{display:flex;flex-direction:column;padding:8px;border-radius:8px;margin-bottom:10px;background:rgba(255,255,255,0.02);}
+  .hero-content{display:flex;gap:10px;align-items:center;cursor:grab;}
+  .hero-content[draggable="true"]:active{cursor:grabbing;}
+  .hero:hover .infob{opacity: 0.9;visibility: visible;}
+  .hero.disabled{opacity:0.45;filter:grayscale(.6);}
+  .hero.disabled .hero-content{cursor:not-allowed;}
   .avatar{width:48px;height:48px;border-radius:8px;background:#111;display:flex;align-items:center;justify-content:center;font-weight:700;}
   .meta{flex:1;}
   .tag{display:inline-block;font-size:12px;padding:3px 8px;border-radius:999px;background:rgba(125,211,252,0.06);color:var(--accent);margin-right:6px;}
@@ -29,6 +32,7 @@
   .remove-assigned{font-size:14px;color:#ef4444;cursor:pointer;padding-left:6px;}
   .timerbar{height:8px;border-radius:4px;margin-top:8px;overflow:hidden;background:#07101a;}
   .timer-inner{height:100%;transition:width 1s linear;}
+  body.paused .timer-inner{transition:none !important;}
   .active-section{margin-top:14px;}
   .log{height:300px;overflow:auto;background:rgba(0,0,0,0.12);padding:10px;border-radius:8px;font-size:13px;}
   .small{font-size:13px;color:var(--muted);}
@@ -36,11 +40,73 @@
   .rep-value{color:var(--gold);font-weight:700;}
   .center-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
   .hint{font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .attribute-pop-up{
+    color: rgba(0, 0, 0, 0);
+    background-color: #e6eef8;
+    height: 0px;
+    padding: 0px;
+    overflow: hidden;
+    border-radius: 8px;
+    margin-top: 8px;
+    width: 100%;
+    transition: height 0.3s ease, padding 0.3s ease;
+  }
+  .attribute-pop-up p{
+    margin: 4px 0;
+    padding: 4px 8px;
+    color: rgba(0, 0, 0, 0);
+  }
+  .headeratt{
+    background-color: #facc15;
+    padding: 0px;
+    height: 0px;
+    overflow: hidden;
+  }
+  .headeratt h3{
+    margin: 0;
+    padding: 0;
+    color: rgba(0, 0, 0, 0);
+  }
+  .infob{background-color: #ef4444; color:#e6eef8; font-size: 10px; font-weight: bold;height: 25px; width: 25px; padding: 5px; margin-bottom: 20px;visibility: hidden; opacity: 0;}
+  .pentagon-container{display:flex;gap:16px;margin-top:12px;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;}
+  .pentagon-wrapper{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .pentagon-label{font-size:12px;color:var(--muted);}
+  .pentagon-svg{width:150px;height:150px;}
+  .completion-stats{margin-top:8px;text-align:center;padding:8px;background:rgba(125,211,252,0.1);border-radius:6px;}
+  .completion-percentage{font-size:20px;font-weight:bold;color:var(--accent);margin-top:4px;}
+  .mission-marker{position:absolute;cursor:pointer;transform:translate(-50%,-50%);transition:all 0.3s ease;z-index:10;pointer-events:auto;}
+  .mission-marker:hover{transform:translate(-50%,-50%) scale(1.2);z-index:20;}
+  .marker-pin{width:40px;height:40px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);position:relative;}
+  .marker-pin::after{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.3);transform:rotate(45deg);}
+  .marker-timer{position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;background:var(--bg);border:2px solid;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;}
+  .marker-title{position:absolute;top:50px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(0,0,0,0.8);padding:4px 8px;border-radius:4px;font-size:11px;opacity:0;pointer-events:none;transition:opacity 0.3s;}
+  .mission-marker:hover .marker-title{opacity:1;}
+  .modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(4px);}
+  .modal-overlay.active{display:flex;}
+  .modal-content{background:var(--card);border-radius:16px;padding:18px;max-width:600px;width:85%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5);position:relative;z-index:1001;}
+  .card.heroes-card{position:relative;z-index:1002;}
+  .map-container{position:relative;width:100%;height:auto;background-size:contain;background-position:center;background-repeat:no-repeat;border-radius:12px;overflow:hidden;border:2px solid rgba(125,211,252,0.1);background-color:#07101a;}
+  #mapImg{display:block;width:100%;height:auto;object-fit:contain;border-radius:12px;position:relative;z-index:0;}
+  .map-container::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#1a2332 0%,#0f1724 50%,#1a2332 100%);z-index:1;}
+  .map-container.has-image::before{background:rgba(15,23,36,0.7);}
+  .map-background{width:100%;height:100%;opacity:0.3;background-image:radial-gradient(circle at 20% 30%,rgba(125,211,252,0.1) 0%,transparent 50%),radial-gradient(circle at 80% 70%,rgba(250,204,21,0.1) 0%,transparent 50%);position:relative;z-index:2;}
+  #missionMarkers{position:absolute;top:0;left:0;width:100%;height:100%;z-index:3;pointer-events:none;}
+  #missionMarkers .mission-marker{pointer-events:auto;}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:16px;}
+  .modal-close{background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all 0.2s;}
+  .modal-close:hover{background:rgba(255,255,255,0.1);color:#fff;}
+  .modal-mission-info{margin-bottom:20px;}
+  .modal-pentagons{display:flex;gap:20px;justify-content:center;margin:20px 0;}
+  .modal-slots{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0;}
+  .modal-slot{width:140px;height:70px;border-radius:8px;background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center;border:2px dashed rgba(255,255,255,0.04);position:relative;}
+  .modal-slot.dragover{border-color:rgba(125,211,252,0.5);background:rgba(125,211,252,0.03);}
+  .modal-actions{display:flex;gap:12px;margin-top:20px;justify-content:flex-end;}
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="card">
+  
+  <div class="card heroes-card">
     <h2>Heróis</h2>
     <div id="heroesList"></div>
     <div class="hint">Arraste heróis para os slots das missões disponíveis.</div>
@@ -49,12 +115,16 @@
   <div class="card">
     <div class="center-top">
       <h2>Centro de Despacho</h2>
-      <div class="rep-bar"> <div class="small">Reputação Atual</div> <div id="repValue" class="rep-value">10</div></div>
+      <div class="rep-bar"> <div class="small">Reputação Atual</div> <div id="repValue" class="rep-value">20</div></div>
     </div>
 
     <div>
-      <h3 style="color:#34d399;margin:0 0 8px;">📋 Missões disponíveis</h3>
-      <div id="incidentsList"></div>
+      <h3 style="color:#34d399;margin:0 0 8px;">🗺️ Mapa de Missões</h3>
+      <div class="map-container" id="mapContainer">
+        <img id="mapImg" alt="Mapa" src="" style="display:none;" />
+        <div class="map-background"></div>
+        <div id="missionMarkers"></div>
+      </div>
     </div>
 
     <div class="active-section">
@@ -69,6 +139,100 @@
   </div>
 </div>
 
+<!-- Modal de Missão -->
+<div class="modal-overlay" id="missionModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle" style="margin:0;color:var(--accent);"></h2>
+      <button class="modal-close" onclick="closeMissionModal()">×</button>
+    </div>
+    <div class="modal-mission-info">
+      <div class="small" id="modalThreat" style="margin-bottom:12px;"></div>
+      <div id="modalDescription" style="margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;border-left:3px solid var(--accent);">
+        <div id="modalDescriptionText" style="color:#e6eef8;line-height:1.5;"></div>
+      </div>
+      <div id="modalHints" style="margin-bottom:16px;padding:12px;background:rgba(125,211,252,0.1);border-radius:8px;">
+        <div class="small" style="color:var(--accent);margin-bottom:8px;font-weight:bold;">💡 Dicas:</div>
+        <ul id="modalHintsList" style="margin:0;padding-left:20px;color:var(--muted);"></ul>
+      </div>
+      <div class="modal-pentagons" id="modalPentagons" style="display:none;">
+        <div id="modal-team-pentagon"></div>
+      </div>
+    </div>
+    <div>
+      <div class="small" style="margin-bottom:8px;">Arraste heróis para os slots:</div>
+      <div class="modal-slots" id="modalSlots"></div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="clearModalSlots()">Limpar slots</button>
+      <button onclick="dispatchFromModal()" style="background:rgba(125,211,252,0.2);border-color:var(--accent);">Enviar equipe</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Resultado da Missão -->
+<div class="modal-overlay" id="resultModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="resultTitle" style="margin:0;color:var(--accent);"></h2>
+      <button class="modal-close" onclick="closeResultModal()">×</button>
+    </div>
+    <div class="modal-mission-info">
+      <div id="resultStatus" style="margin-bottom:16px;padding:12px;border-radius:8px;text-align:center;font-size:18px;font-weight:bold;"></div>
+      <div class="modal-pentagons" id="resultPentagons">
+        <div id="result-mission-pentagon"></div>
+        <div id="result-team-pentagon"></div>
+      </div>
+      <div class="completion-stats" style="margin-top:16px;">
+        <div class="small">Taxa de Sucesso:</div>
+        <div class="completion-percentage" id="resultSuccessRate">0%</div>
+        <div class="small" style="margin-top:8px;" id="resultDetails"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeResultModal()" style="background:rgba(125,211,252,0.2);border-color:var(--accent);">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Level Up - Escolha de Atributo -->
+<div class="modal-overlay" id="levelUpModal">
+  <div class="modal-content" style="max-width:500px;">
+    <div class="modal-header">
+      <h2 style="margin:0;color:var(--gold);">⭐ Level Up!</h2>
+      <button class="modal-close" onclick="closeLevelUpModal()">×</button>
+    </div>
+    <div class="modal-mission-info">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:18px;font-weight:bold;color:var(--accent);margin-bottom:8px;" id="levelUpHeroName"></div>
+        <div class="small">Escolha um atributo para aumentar:</div>
+      </div>
+      <div id="levelUpAttributes" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <!-- Botões de atributos serão inseridos aqui -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Game Over -->
+<div class="modal-overlay" id="gameOverModal">
+  <div class="modal-content" style="max-width:500px;text-align:center;">
+    <div class="modal-header" style="justify-content:center;">
+      <h2 style="margin:0;color:#ef4444;font-size:32px;">💀 Game Over</h2>
+    </div>
+    <div class="modal-mission-info">
+      <div style="font-size:20px;margin-bottom:16px;color:var(--muted);">
+        Sua reputação chegou a zero!
+      </div>
+      <div style="font-size:16px;margin-bottom:24px;color:var(--muted);">
+        O centro de despacho foi fechado devido à falta de confiança da população.
+      </div>
+      <div class="modal-actions" style="justify-content:center;">
+        <button onclick="restartGame()" style="background:rgba(125,211,252,0.2);border-color:var(--accent);padding:12px 24px;font-size:16px;font-weight:bold;">🔄 Reiniciar Jogo</button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
 /* Dispatch com Drag & Drop
    - drag herói -> drop em slot
@@ -79,33 +243,249 @@
 
 const now = ()=>Math.floor(Date.now()/1000);
 let time = now();
-let reputation = 10;
+let reputation = 20;
+let gameOver = false;
 let log = [];
 
 const heroes = [
-  {id:'h1',name:'Anchor',rating:78,tags:['brute','tank'],cooldown:0,level:1,xp:0},
-  {id:'h2',name:'Flicker',rating:65,tags:['recon','speed'],cooldown:0,level:1,xp:0},
-  {id:'h3',name:'Siren',rating:72,tags:['support','heal'],cooldown:0,level:1,xp:0},
-  {id:'h4',name:'Volt',rating:58,tags:['tech','ranged'],cooldown:0,level:1,xp:0},
-  {id:'h5',name:'Shade',rating:66,tags:['stealth','recon'],cooldown:0,level:1,xp:0},
-  {id:'h6',name:'Blaze',rating:80,tags:['brute','fire'],cooldown:0,level:1,xp:0},
+  {
+    id: 'h1',
+    name: 'Sun',
+    rating: 90,
+    tags: ['brute', 'light'],
+    attb: { combt: 7, vig: 7, mob: 4, krism: 3, intel: 3 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  },
+  {
+    id: 'h2',
+    name: 'Detetive',
+    rating: 82,
+    tags: ['recon', 'tactician'],
+    attb: { combt: 3, vig: 3, mob: 5, krism: 4, intel: 7 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  },
+  {
+    id: 'h3',
+    name: 'Mako O Homem Tubarão',
+    rating: 84,
+    tags: ['brute', 'aquatic'],
+    attb: { combt: 7, vig: 6, mob: 3, krism: 5, intel: 2 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  },
+  {
+    id: 'h4',
+    name: 'Banshee',
+    rating: 75,
+    tags: ['ghost', 'support'],
+    attb: { combt: 3, vig: 2, mob: 5, krism: 4, intel: 5 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  },
+  {
+    id: 'h5',
+    name: 'Condutora',
+    rating: 77,
+    tags: ['magic', 'speed'],
+    attb: { combt: 2, vig: 2, mob: 7, krism: 3, intel: 6 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  },
+  {
+    id: 'h6',
+    name: 'Mestra Vaheing',
+    rating: 88,
+    tags: ['magic', 'leader'],
+    attb: { combt: 3, vig: 3, mob: 2, krism: 7, intel: 7 },
+    cooldown: 0,
+    level: 1,
+    xp: 0
+  }
 ];
 
+// Salvar cópia dos atributos iniciais dos heróis para restaurar no reinício
+const initialHeroAttributes = heroes.map(hero => ({
+  id: hero.id,
+  attb: {...hero.attb},
+  rating: hero.rating
+}));
+
 const pool = [
-  {title:'Colapso estrutural',threat:3,required:'brute'},
-  {title:'Roubo em andamento',threat:2,required:'recon'},
-  {title:'Ataque químico',threat:3,required:'tech'},
-  {title:'Resgate em incêndio',threat:4,required:'brute'},
-  {title:'Sequestro relâmpago',threat:2,required:'stealth'},
-  {title:'Vazamento tóxico',threat:3,required:'tech'},
-  {title:'Motim urbano',threat:1,required:'support'},
-  {title:'Sabotagem elétrica',threat:3,required:'tech'},
-  {title:'Fuga de vilão',threat:4,required:'recon'}
+  {
+    title: 'Colapso estrutural',
+    threat: 3,
+    attb: { combt: 5, vig: 6, mob: 3, krism: 1, intel: 3 },
+    hints: [
+      'Força é essencial para estabilizar estruturas',
+      'Alta resistência para suportar ambiente instável',
+      'Alguma análise técnica ajuda na avaliação'
+    ],
+    description: 'Alô? Um prédio aqui tá cedendo, as paredes estão rachando! Tem gente lá dentro ainda, por favor mandem ajuda!'
+  },
+  {
+    title: 'Roubo em andamento',
+    threat: 2,
+    attb: { combt: 3, vig: 2, mob: 6, krism: 2, intel: 4 },
+    hints: [
+      'Velocidade para alcançar os suspeitos',
+      'Raciocínio rápido para prever rotas',
+      'Combate moderado pode ser necessário'
+    ],
+    description: 'Oi, eu vi dois caras armados fugindo com sacolas do cofre, eles pegaram um carro! Alguém precisa parar eles!'
+  },
+  {
+    title: 'Ataque químico',
+    threat: 3,
+    attb: { combt: 4, vig: 2, mob: 2, krism: 1, intel: 7 },
+    hints: [
+      'Alto intelecto para identificar substâncias',
+      'Análise técnica indispensável',
+      'Combate leve contra possíveis responsáveis'
+    ],
+    description: 'Socorro! Tem uma fumaça estranha saindo de uns barris abertos, o cheiro é horrível! Acho que é algo químico!'
+  },
+  {
+    title: 'Resgate em incêndio',
+    threat: 4,
+    attb: { combt: 6, vig: 7, mob: 3, krism: 2, intel: 3 },
+    hints: [
+      'Resistência extrema para lidar com calor',
+      'Força para mover destroços',
+      'Agilidade ajuda a evacuar vítimas'
+    ],
+    description: 'O prédio tá pegando fogo inteiro! Tem gente presa nos andares de cima, não dá pra entrar sem ajuda!'
+  },
+  {
+    title: 'Sequestro relâmpago',
+    threat: 2,
+    attb: { combt: 2, vig: 2, mob: 7, krism: 4, intel: 5 },
+    hints: [
+      'Velocidade para alcançar o veículo',
+      'Inteligência para rastrear a rota dos criminosos',
+      'Carisma pode evitar confronto direto'
+    ],
+    description: 'Levaram uma pessoa dentro de um carro escuro, tão em alta velocidade! Pelo amor de Deus, encontrem eles!'
+  },
+  {
+    title: 'Vazamento tóxico',
+    threat: 3,
+    attb: { combt: 3, vig: 2, mob: 3, krism: 1, intel: 6 },
+    hints: [
+      'Intelecto para identificar o composto',
+      'Análise técnica necessária para contenção',
+      'Combate leve contra intrusos'
+    ],
+    description: 'Tem um líquido estranho saindo de uns tambores no galpão, tá corroendo o chão! Isso não pode ser normal!'
+  },
+  {
+    title: 'Motim urbano',
+    threat: 1,
+    attb: { combt: 1, vig: 2, mob: 2, krism: 6, intel: 3 },
+    hints: [
+      'Carisma para acalmar a multidão',
+      'Diplomacia evita escalada de violência',
+      'Pouca necessidade de combate'
+    ],
+    description: 'A multidão tá ficando agressiva aqui, tão gritando e empurrando! Precisamos de alguém pra acalmar a situação!'
+  },
+  {
+    title: 'Sabotagem elétrica',
+    threat: 3,
+    attb: { combt: 1, vig: 1, mob: 2, krism: 1, intel: 7 },
+    hints: [
+      'Intelecto alto para diagnosticar falha',
+      'Conhecimento técnico é essencial',
+      'Combate mínimo esperado'
+    ],
+    description: 'A energia de todo o bairro caiu de repente! Eu vi alguém mexendo nos cabos antes disso, acho que sabotaram!'
+  },
+  {
+    title: 'Fuga de vilão',
+    threat: 4,
+    attb: { combt: 4, vig: 3, mob: 7, krism: 2, intel: 6 },
+    hints: [
+      'Mobilidade alta para manter perseguição',
+      'Inteligência para prever movimentos',
+      'Combate intenso possível'
+    ],
+    description: 'O criminoso que vocês prenderam fugiu! Ele tá correndo pelos telhados, alguém precisa parar ele agora!'
+  },
+
+  // NOVOS INCIDENTES
+  {
+    title: 'Criatura subterrânea',
+    threat: 3,
+    attb: { combt: 6, vig: 5, mob: 3, krism: 1, intel: 3 },
+    hints: [
+      'Força para enfrentar criatura resistente',
+      'Resistência ajuda em ambiente instável',
+      'Carisma pouco útil na situação'
+    ],
+    description: 'Eu juro, tem alguma coisa cavando embaixo da minha casa! Eu tô ouvindo rugidos e o chão tá tremendo!'
+  },
+  {
+    title: 'Trem desgovernado',
+    threat: 4,
+    attb: { combt: 3, vig: 3, mob: 6, krism: 2, intel: 6 },
+    hints: [
+      'Mobilidade para alcançar locomotiva',
+      'Intelecto para estabilizar sistemas',
+      'Preparação para confronto com sabotadores'
+    ],
+    description: 'Tem um trem vindo sem controle pela linha! As portas não abrem e os passageiros estão entrando em pânico!'
+  },
+  {
+    title: 'Ameaça espectral',
+    threat: 3,
+    attb: { combt: 2, vig: 2, mob: 6, krism: 3, intel: 5 },
+    hints: [
+      'Agilidade para lidar com entidade imprevisível',
+      'Intelecto ajuda a entender fenômenos',
+      'Carisma útil para acalmar testemunhas'
+    ],
+    description: 'Eu vi uma figura flutuando dentro da minha casa! As luzes piscam quando ela aparece, não tô inventando!'
+  },
+  {
+    title: 'Reator instável',
+    threat: 4,
+    attb: { combt: 4, vig: 3, mob: 2, krism: 1, intel: 7 },
+    hints: [
+      'Intelecto crítico para evitar colapso',
+      'Ambiente perigoso requer cautela',
+      'Combate possível contra invasores'
+    ],
+    description: 'O reator da usina tá apitando sem parar! Os técnicos fugiram, parece que vai explodir se ninguém agir!'
+  },
+  {
+    title: 'Criatura gigante avistada',
+    threat: 4,
+    attb: { combt: 7, vig: 6, mob: 4, krism: 1, intel: 2 },
+    hints: [
+      'Força extrema para enfrentar ameaça',
+      'Resistência necessária devido ao tamanho do inimigo',
+      'Pouco espaço para diplomacia'
+    ],
+    description: 'Tem um monstro enorme andando pela costa! Tá derrubando barcos e vindo pra cidade!'
+  }
 ];
+
 
 let incidents = [];
 let activeMissions = [];
 let nextIncidentId = 1;
+let modalOpen = false;
+let resultModalOpen = false;
+let levelUpModalOpen = false;
+let currentModalIncident = null;
+let currentLevelUpHero = null;
+let incidentSpawnScheduled = false; // Flag para evitar múltiplos timeouts
 
 /* helpers */
 function getIncidentDuration(threat){
@@ -132,6 +512,8 @@ function addXP(hero,amount){
     hero.level++;
     hero.rating += 3;
     addLog(`⭐ ${hero.name} subiu para o nível ${hero.level}!`,'levelup');
+    // Mostrar modal de escolha de atributo
+    showLevelUpModal(hero);
   }
 }
 function synergyBonus(team){
@@ -155,7 +537,9 @@ function newIncident(){
     id,
     title: pick.title,
     threat: pick.threat,
-    required: pick.required,
+    attb: pick.attb,
+    hints: pick.hints || [],
+    description: pick.description || '',
     start: now(),
     duration: getIncidentDuration(pick.threat),
     assigned: [null,null,null] // 3 slots (null ou hero.id)
@@ -174,30 +558,97 @@ function isHeroAssigned(heroId){
   return false;
 }
 
-/* RENDER HEROES (draggable se disponível) */
-function renderHeroes(){
+function rollout(button){
+  const heroName = button.value;
+  const infopopup = document.getElementById(heroName+"att");
+  const infoheader = document.getElementById(heroName+"headeratt");
+
+  if(!infopopup || !infoheader) return;
+
+  if(button.innerHTML=="∨"){
+    // Mostrar pop-up
+    infopopup.style.padding='8px';
+    infopopup.style.height='auto';
+    infopopup.style.minHeight='33dvh';
+    infopopup.style.color ='#111';
+    infoheader.style.padding='8px';
+    infoheader.style.height='auto';
+    infoheader.style.color ='#111';
+    // Tornar o h3 do header visível
+    const h3 = infoheader.querySelector('h3');
+    if(h3) h3.style.color = '#111';
+    // Tornar os parágrafos visíveis
+    const paragraphs = infopopup.querySelectorAll('p');
+    paragraphs.forEach(p => {
+      p.style.color = '#111';
+      p.style.display = 'block';
+    });
+    button.innerHTML = "∧";
+  }
+  else{
+    // Esconder pop-up
+    infopopup.style.padding='0px';
+    infopopup.style.height='0px';
+    infopopup.style.minHeight='0px';
+    infopopup.style.color ='rgba(0,0,0,0)';
+    infoheader.style.padding='0px';
+    infoheader.style.height='0px';
+    infoheader.style.color ='rgba(0,0,0,0)';
+    // Esconder o h3 do header
+    const h3 = infoheader.querySelector('h3');
+    if(h3) h3.style.color = 'rgba(0,0,0,0)';
+    // Esconder os parágrafos
+    const paragraphs = infopopup.querySelectorAll('p');
+    paragraphs.forEach(p => {
+      p.style.color = 'rgba(0,0,0,0)';
+      p.style.display = 'none';
+    });
+    button.innerHTML = "∨";
+  }
+}
+/* INICIALIZAÇÃO: Cria elementos HTML dos heróis (chamada apenas uma vez) */
+function initHeroes(){
   el('heroesList').innerHTML = heroes.map(h=>{
-    const cdLeft = Math.max(0, h.cooldown - time);
-    const assigned = isHeroAssigned(h.id);
-    const disabled = cdLeft>0 || assigned;
-    const pct = Math.min(100, (h.xp / xpNeeded(h.level)) * 100);
     const initials = h.name[0];
-    return `<div class="hero ${disabled?'disabled':''}" draggable="${disabled?false:true}" data-hero="${h.id}" id="hero-${h.id}">
-      <div class="avatar">${initials}</div>
-      <div class="meta">
-        <b>${h.name}</b> <div class="small">LV ${h.level} • Rating ${h.rating}</div>
-        <div style="margin-top:6px" class="xpbar"><div class="xpfill" style="width:${pct}%"></div></div>
-        ${cdLeft>0?`<div class="small">⏳ Cooldown: ${cdLeft}s</div>`:''}
+    return `<div class="hero" data-hero="${h.id}" id="hero-${h.id}">
+      <div class="hero-content" draggable="true">
+        <div class="avatar">${initials}</div>
+        <div class="meta">
+          <b>${h.name}</b> <div class="small hero-level-rating">LV ${h.level} • Rating ${h.rating}</div>
+          <div style="margin-top:6px" class="xpbar"><div class="xpfill hero-xp-fill" style="width:0%"></div></div>
+          <div class="small hero-cooldown" style="display:none;"></div>
+        </div>
+        <div class="info">
+          <button class="infob" onclick="rollout(this)" value="${h.name}">∨</button>
+        </div>
+      </div>
+      <div class="attribute-pop-up" id="${h.name}att">
+        <div id="${h.name}headeratt" class="headeratt"><h3>Atributos:</h3></div>
+        <p>Combate:${h.attb.combt}</p>
+        <p>Vigor:${h.attb.vig}</p>
+        <p>Mobilidade:${h.attb.mob}</p>
+        <p>Carisma:${h.attb.krism}</p>
+        <p>Intelecto:${h.attb.intel}</p>
       </div>
     </div>`;
   }).join('');
-  // attach drag listeners
-  document.querySelectorAll('.hero[draggable="true"]').forEach(elm=>{
-    elm.addEventListener('dragstart', e=>{
-      e.dataTransfer.setData('text/plain', elm.dataset.hero);
+  
+  // Anexa event listeners de drag (apenas uma vez)
+  document.querySelectorAll('.hero-content').forEach(heroContent=>{
+    const heroEl = heroContent.closest('.hero');
+    if(!heroEl) return;
+    
+    heroContent.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('text/plain', heroEl.dataset.hero);
       // set drag image
-      const img = document.createElement('div'); img.style.padding='6px'; img.style.background='#111'; img.style.color='#fff'; img.style.borderRadius='6px';
-      img.textContent = elm.querySelector('b').textContent;
+      const img = document.createElement('div'); 
+      img.style.padding='6px'; 
+      img.style.background='#111'; 
+      img.style.color='#fff'; 
+      img.style.borderRadius='6px'; 
+      img.style.width='200px';
+      const nameEl = heroEl.querySelector('b');
+      if(nameEl) img.textContent = nameEl.textContent;
       document.body.appendChild(img);
       e.dataTransfer.setDragImage(img, -10, -10);
       setTimeout(()=>document.body.removeChild(img),0);
@@ -205,60 +656,578 @@ function renderHeroes(){
   });
 }
 
-/* render de incidents disponíveis — slots com drop */
-function renderIncidents(){
-  // build HTML
-  el('incidentsList').innerHTML = incidents.map(inc=>{
-    const elapsed = now() - inc.start;
-    const pct = Math.max(0,100 - (elapsed / inc.duration) * 100);
-    const color = getTimerColor(inc.threat);
-    const slotsHtml = inc.assigned.map((aid,idx)=>{
-      if(aid){
-        const hero = heroes.find(h=>h.id===aid);
-        return `<div class="slot assigned" data-slot="${idx}" data-incident="${inc.id}">
-          <div style="display:flex;align-items:center;gap:8px;width:100%;">
-            <div class="small-avatar">${hero.name[0]}</div>
-            <div class="name">${hero.name}</div>
-            <div class="remove-assigned" data-incident="${inc.id}" data-slot="${idx}">✖</div>
-          </div>
-        </div>`;
+/* ATUALIZAÇÃO: Altera apenas os valores dinâmicos (chamada sempre que necessário) */
+function updateHeroes(){
+  heroes.forEach(h=>{
+    const heroEl = el(`hero-${h.id}`);
+    if(!heroEl) return;
+    
+    const cdLeft = Math.max(0, h.cooldown - time);
+    const assigned = isHeroAssigned(h.id);
+    const disabled = cdLeft>0 || assigned;
+    const pct = Math.min(100, (h.xp / xpNeeded(h.level)) * 100);
+    
+    // Atualiza classe disabled e draggable do hero-content
+    const heroContent = heroEl.querySelector('.hero-content');
+    if(heroContent){
+      if(disabled){
+        heroEl.classList.add('disabled');
+        heroContent.setAttribute('draggable', 'false');
       } else {
-        return `<div class="slot empty-slot" data-slot="${idx}" data-incident="${inc.id}">Arraste aqui</div>`;
+        heroEl.classList.remove('disabled');
+        heroContent.setAttribute('draggable', 'true');
       }
-    }).join('');
-    return `<div class="incident" id="${inc.id}">
-      <b>${inc.title}</b>
-      <div class="small">Ameaça ${inc.threat} • Requer: ${inc.required}</div>
-      <div class="timerbar"><div class="timer-inner" style="width:${pct}%;background:${color};"></div></div>
-      <div class="assign-row">${slotsHtml}</div>
-      <div style="margin-top:8px;display:flex;gap:8px;">
-        <button onclick="dispatchTeam('${inc.id}')">Enviar equipe</button>
-        <button onclick="clearSlots('${inc.id}')">Limpar slots</button>
-      </div>
-    </div>`;
+    }
+    
+    // Atualiza nível e rating
+    const levelRatingEl = heroEl.querySelector('.hero-level-rating');
+    if(levelRatingEl) levelRatingEl.textContent = `LV ${h.level} • Rating ${h.rating}`;
+    
+    // Atualiza barra de XP
+    const xpFillEl = heroEl.querySelector('.hero-xp-fill');
+    if(xpFillEl) xpFillEl.style.width = `${pct}%`;
+    
+    // Atualiza cooldown
+    const cooldownEl = heroEl.querySelector('.hero-cooldown');
+    if(cooldownEl){
+      if(cdLeft>0){
+        cooldownEl.textContent = `⏳ Cooldown: ${cdLeft}s`;
+        cooldownEl.style.display = '';
+      } else {
+        cooldownEl.style.display = 'none';
+      }
+    }
+  });
+}
+
+/* Get mission attributes directly from incident */
+function getMissionAttributes(inc){
+  return inc.attb || {combt:0, vig:0, mob:0, krism:0, intel:0};
+}
+
+/* Aggregate hero attributes from assigned team */
+function getTeamAttributes(assignedHeroIds){
+  if(!assignedHeroIds || assignedHeroIds.length === 0){
+    return {combt:0, vig:0, mob:0, krism:0, intel:0};
+  }
+  
+  const assignedHeroes = assignedHeroIds
+    .map(id => heroes.find(h => h.id === id))
+    .filter(Boolean);
+  
+  if(assignedHeroes.length === 0){
+    return {combt:0, vig:0, mob:0, krism:0, intel:0};
+  }
+  
+  // Sum all attributes from assigned heroes
+  return assignedHeroes.reduce((acc, hero) => {
+    return {
+      combt: acc.combt + (hero.attb.combt || 0),
+      vig: acc.vig + (hero.attb.vig || 0),
+      mob: acc.mob + (hero.attb.mob || 0),
+      krism: acc.krism + (hero.attb.krism || 0),
+      intel: acc.intel + (hero.attb.intel || 0)
+    };
+  }, {combt:0, vig:0, mob:0, krism:0, intel:0});
+}
+
+/* Calculate pentagon vertices */
+function getPentagonVertices(attributes, centerX, centerY, radius){
+  const maxValue = Math.max(...Object.values(attributes), 1);
+  const normalized = {
+    combt: (attributes.combt / maxValue) * radius,
+    vig: (attributes.vig / maxValue) * radius,
+    mob: (attributes.mob / maxValue) * radius,
+    krism: (attributes.krism / maxValue) * radius,
+    intel: (attributes.intel / maxValue) * radius
+  };
+  
+  // Pentagon vertices: 0° (top), 72°, 144°, 216°, 288°
+  const angles = [Math.PI/2, Math.PI/2 - 2*Math.PI/5, Math.PI/2 - 4*Math.PI/5, 
+                  Math.PI/2 - 6*Math.PI/5, Math.PI/2 - 8*Math.PI/5];
+  
+  const order = ['combt', 'vig', 'mob', 'krism', 'intel'];
+  return order.map((attr, idx) => {
+    const angle = angles[idx];
+    const r = normalized[attr];
+    return {
+      x: centerX + r * Math.cos(angle),
+      y: centerY + r * Math.sin(angle),
+      attr: attr,
+      value: attributes[attr]
+    };
+  });
+}
+
+/* Calculate pentagon area using shoelace formula */
+function calculatePentagonArea(vertices){
+  let area = 0;
+  for(let i = 0; i < vertices.length; i++){
+    const j = (i + 1) % vertices.length;
+    area += vertices[i].x * vertices[j].y;
+    area -= vertices[j].x * vertices[i].y;
+  }
+  return Math.abs(area) / 2;
+}
+
+/* Calculate pentagon area from attributes using a common scale */
+function calculatePentagonAreaFromAttributes(attributes, maxValue, centerX, centerY, radius){
+  const normalized = {
+    combt: (attributes.combt / maxValue) * radius,
+    vig: (attributes.vig / maxValue) * radius,
+    mob: (attributes.mob / maxValue) * radius,
+    krism: (attributes.krism / maxValue) * radius,
+    intel: (attributes.intel / maxValue) * radius
+  };
+  
+  // Pentagon vertices: 0° (top), 72°, 144°, 216°, 288°
+  const angles = [Math.PI/2, Math.PI/2 - 2*Math.PI/5, Math.PI/2 - 4*Math.PI/5, 
+                  Math.PI/2 - 6*Math.PI/5, Math.PI/2 - 8*Math.PI/5];
+  
+  const order = ['combt', 'vig', 'mob', 'krism', 'intel'];
+  const vertices = order.map((attr, idx) => {
+    const angle = angles[idx];
+    const r = normalized[attr];
+    return {
+      x: centerX + r * Math.cos(angle),
+      y: centerY + r * Math.sin(angle),
+      attr: attr,
+      value: attributes[attr]
+    };
+  });
+  
+  return calculatePentagonArea(vertices);
+}
+
+/* Calculate intersection area between two pentagons */
+function calculateIntersectionArea(missionAttb, teamAttb, centerX, centerY, radius){
+  // Encontrar o máximo valor entre ambos os conjuntos de atributos para usar como escala comum
+  const allValues = [
+    missionAttb.combt, missionAttb.vig, missionAttb.mob, missionAttb.krism, missionAttb.intel,
+    teamAttb.combt, teamAttb.vig, teamAttb.mob, teamAttb.krism, teamAttb.intel
+  ];
+  const maxValue = Math.max(...allValues, 1);
+  
+  // Para cada atributo, pegar o mínimo entre missão e equipe (isso representa a sobreposição)
+  const intersectionAttb = {
+    combt: Math.min(missionAttb.combt, teamAttb.combt),
+    vig: Math.min(missionAttb.vig, teamAttb.vig),
+    mob: Math.min(missionAttb.mob, teamAttb.mob),
+    krism: Math.min(missionAttb.krism, teamAttb.krism),
+    intel: Math.min(missionAttb.intel, teamAttb.intel)
+  };
+  
+  // Calcular área usando escala comum
+  return calculatePentagonAreaFromAttributes(intersectionAttb, maxValue, centerX, centerY, radius);
+}
+
+/* Draw pentagon SVG */
+function drawPentagonSVG(attributes, containerId, label){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  
+  const size = 150;
+  const centerX = size / 2;
+  const centerY = size / 2;
+  const radius = 60;
+  
+  const vertices = getPentagonVertices(attributes, centerX, centerY, radius);
+  const area = calculatePentagonArea(vertices);
+  
+  // Create path string
+  const pathData = vertices.map((v, i) => 
+    `${i === 0 ? 'M' : 'L'} ${v.x} ${v.y}`
+  ).join(' ') + ' Z';
+  
+  // Create grid lines
+  const gridLines = [];
+  for(let i = 1; i <= 5; i++){
+    const r = (radius * i) / 5;
+    const gridPath = ['combt', 'vig', 'mob', 'krism', 'intel'].map((attr, idx) => {
+      const angle = Math.PI/2 - (idx * 2 * Math.PI / 5);
+      const x = centerX + r * Math.cos(angle);
+      const y = centerY + r * Math.sin(angle);
+      return `${idx === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ') + ' Z';
+    gridLines.push(`<path d="${gridPath}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>`);
+  }
+  
+  // Create axis lines
+  const axisLines = ['combt', 'vig', 'mob', 'krism', 'intel'].map((attr, idx) => {
+    const angle = Math.PI/2 - (idx * 2 * Math.PI / 5);
+    const x = centerX + radius * Math.cos(angle);
+    const y = centerY + radius * Math.sin(angle);
+    return `<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>`;
   }).join('');
+  
+  // Attribute labels
+  const labels = ['combt', 'vig', 'mob', 'krism', 'intel'].map((attr, idx) => {
+    const angle = Math.PI/2 - (idx * 2 * Math.PI / 5);
+    const labelRadius = radius + 15;
+    const x = centerX + labelRadius * Math.cos(angle);
+    const y = centerY + labelRadius * Math.sin(angle);
+    const attrNames = {combt:'Combate', vig:'Vigor', mob:'Mobilidade', krism:'Carisma', intel:'Intelecto'};
+    return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="10" fill="#94a3b8">${attrNames[attr]}</text>`;
+  }).join('');
+  
+  // Value labels at vertices
+  const valueLabels = vertices.map(v => {
+    const attrNames = {combt:'Combate', vig:'Vigor', mob:'Mobilidade', krism:'Carisma', intel:'Intelecto'};
+    return `<text x="${v.x}" y="${v.y - 8}" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="bold" fill="#7dd3fc">${v.value}</text>`;
+  }).join('');
+  
+  const svg = `
+    <svg class="pentagon-svg" viewBox="0 0 ${size} ${size}">
+      ${gridLines.join('')}
+      ${axisLines}
+      <path d="${pathData}" fill="rgba(125,211,252,0.2)" stroke="#7dd3fc" stroke-width="2"/>
+      ${labels}
+      ${valueLabels}
+    </svg>
+  `;
+  
+  container.innerHTML = `
+    <div class="pentagon-wrapper">
+      <div class="pentagon-label">${label}</div>
+      ${svg}
+    </div>
+  `;
+  
+  return area;
+}
 
-  // attach drop listeners
-  document.querySelectorAll('.slot').forEach(slot=>{
-    slot.addEventListener('dragover', e=>{ e.preventDefault(); slot.classList.add('dragover'); });
-    slot.addEventListener('dragleave', e=>{ slot.classList.remove('dragover'); });
-    slot.addEventListener('drop', e=>{
-      e.preventDefault(); slot.classList.remove('dragover');
+/* Carregar imagem do mapa se disponível */
+function loadMapImage(){
+  const mapContainer = document.getElementById('mapContainer');
+  if(!mapContainer) return;
+  // Tentar carregar diferentes formatos de imagem e usar a tag <img>
+  const mapImgEl = document.getElementById('mapImg');
+  if(!mapImgEl) return;
+
+  const imageFormats = ['map.jpg', 'map.png', 'map.webp', 'mapa.jpg', 'mapa.png'];
+  let imageLoaded = false;
+
+  imageFormats.forEach(format => {
+    if(imageLoaded) return;
+    const tester = new Image();
+    tester.onload = function(){
+      mapImgEl.src = format;
+      mapImgEl.style.display = 'block';
+      mapContainer.classList.add('has-image');
+      imageLoaded = true;
+    };
+    tester.onerror = function(){ /* next */ };
+    tester.src = format;
+  });
+}
+
+/* render de incidents disponíveis — marcadores no mapa */
+function renderIncidents(){
+  const mapContainer = el('missionMarkers');
+  if(!mapContainer) return;
+  
+  // Limpar marcadores existentes
+  mapContainer.innerHTML = '';
+  
+  // Criar marcadores para cada missão
+  incidents.forEach((inc, idx) => {
+    const elapsed = time - inc.start;
+    const pct = Math.max(0, 100 - (elapsed / inc.duration) * 100);
+    const color = getTimerColor(inc.threat);
+    
+    // Posição no mapa (consistente por ID usando hash)
+    const hash = inc.id.split('').reduce((a, b) => { 
+      a = ((a << 5) - a) + b.charCodeAt(0); 
+      return a & a; 
+    }, 0);
+    const x = 15 + (Math.abs(hash) % 70);
+    const y = 15 + (Math.abs(hash * 13) % 70);
+    
+    const marker = document.createElement('div');
+    marker.className = 'mission-marker';
+    marker.style.left = `${x}%`;
+    marker.style.top = `${y}%`;
+    marker.style.zIndex = '10';
+    marker.style.position = 'absolute';
+    marker.onclick = () => openMissionModal(inc.id);
+    
+    const pinColor = color;
+    const timerText = Math.max(0, Math.ceil((inc.duration - elapsed) / 1));
+    
+    marker.innerHTML = `
+      <div class="marker-pin" style="background:${pinColor};">
+        <div class="marker-timer" style="border-color:${pinColor};color:${pinColor};">
+          ${timerText > 0 ? timerText : '!'}
+        </div>
+      </div>
+      <div class="marker-title">${inc.title}</div>
+    `;
+    
+    mapContainer.appendChild(marker);
+  });
+}
+
+/* Abrir modal de missão */
+function openMissionModal(incId){
+  const inc = incidents.find(i => i.id === incId);
+  if(!inc) return;
+  
+  // Pausar o tempo antes de abrir o modal
+  modalOpen = true;
+  document.body.classList.add('paused');
+  currentModalIncident = inc;
+  
+  // Atualizar conteúdo do modal
+  el('modalTitle').textContent = inc.title;
+  el('modalThreat').textContent = `Ameaça: ${inc.threat} • Tempo restante: ${Math.max(0, Math.ceil((inc.duration - (time - inc.start)) / 1))}s`;
+  
+  // Mostrar descrição
+  const descriptionText = el('modalDescriptionText');
+  if(descriptionText){
+    descriptionText.textContent = inc.description || 'Nenhuma descrição disponível.';
+  }
+  
+  // Mostrar dicas
+  const hintsList = el('modalHintsList');
+  if(hintsList && inc.hints && inc.hints.length > 0){
+    hintsList.innerHTML = inc.hints.map(hint => `<li style="margin-bottom:4px;">${hint}</li>`).join('');
+  } else if(hintsList){
+    hintsList.innerHTML = '<li>Nenhuma dica disponível</li>';
+  }
+  
+  // Renderizar slots
+  renderModalSlots();
+  
+  // Mostrar modal
+  el('missionModal').classList.add('active');
+  
+  // Atualizar completude se houver heróis atribuídos
+  updateModalCompletion();
+}
+
+/* Renderizar slots no modal */
+function renderModalSlots(){
+  if(!currentModalIncident) return;
+  
+  const slotsHtml = currentModalIncident.assigned.map((aid, idx) => {
+    if(aid){
+      const hero = heroes.find(h => h.id === aid);
+      return `<div class="modal-slot assigned" data-slot="${idx}">
+        <div style="display:flex;align-items:center;gap:8px;width:100%;padding:8px;">
+          <div class="small-avatar">${hero.name[0]}</div>
+          <div class="name" style="flex:1;font-size:13px;">${hero.name}</div>
+          <div class="remove-assigned" onclick="removeFromModalSlot(${idx})" style="cursor:pointer;color:#ef4444;">✖</div>
+        </div>
+      </div>`;
+    } else {
+      return `<div class="modal-slot empty-slot" data-slot="${idx}">Arraste aqui</div>`;
+    }
+  }).join('');
+  
+  el('modalSlots').innerHTML = slotsHtml;
+  
+  // Attach drop listeners
+  document.querySelectorAll('.modal-slot').forEach(slot => {
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('dragover'); });
+    slot.addEventListener('dragleave', e => { slot.classList.remove('dragover'); });
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('dragover');
       const heroId = e.dataTransfer.getData('text/plain');
-      const incId = slot.dataset.incident;
       const slotIndex = Number(slot.dataset.slot);
-      tryAssignHeroToSlot(heroId, incId, slotIndex);
+      tryAssignHeroToModalSlot(heroId, slotIndex);
     });
   });
+}
 
-  // attach remove assigned handlers
-  document.querySelectorAll('.remove-assigned').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      const incId = btn.dataset.incident;
-      const idx = Number(btn.dataset.slot);
-      unassignSlot(incId, idx);
-    });
-  });
+/* Atualizar completude no modal */
+function updateModalCompletion(){
+  if(!currentModalIncident) return;
+  
+  const assignedHeroIds = currentModalIncident.assigned.filter(Boolean);
+  if(assignedHeroIds.length === 0){
+    el('modalPentagons').style.display = 'none';
+    // Limpar pentágono da equipe se existir
+    const teamPentagon = document.getElementById('modal-team-pentagon');
+    if(teamPentagon) teamPentagon.innerHTML = '';
+    return;
+  }
+  
+  el('modalPentagons').style.display = 'flex';
+  
+  const teamAttb = getTeamAttributes(assignedHeroIds);
+  
+  // Desenhar pentágono da equipe
+  drawPentagonSVG(teamAttb, 'modal-team-pentagon', 'Atributos da Equipe');
+}
+
+/* Tentar atribuir herói ao slot do modal */
+function tryAssignHeroToModalSlot(heroId, slotIdx){
+  if(!currentModalIncident || !heroId) return;
+  const hero = heroes.find(h => h.id === heroId);
+  if(!hero) return;
+  if(hero.cooldown > time){ addLog(`Herói ${hero.name} está em cooldown.`, 'fail'); return; }
+  if(isHeroAssigned(heroId)){ addLog(`Herói ${hero.name} já está atribuído.`, 'fail'); return; }
+  
+  currentModalIncident.assigned[slotIdx] = heroId;
+  renderModalSlots();
+  updateModalCompletion();
+}
+
+/* Remover herói do slot do modal */
+function removeFromModalSlot(idx){
+  if(!currentModalIncident) return;
+  currentModalIncident.assigned[idx] = null;
+  renderModalSlots();
+  updateModalCompletion();
+}
+
+/* Limpar slots do modal */
+function clearModalSlots(){
+  if(!currentModalIncident) return;
+  currentModalIncident.assigned = [null, null, null];
+  renderModalSlots();
+  updateModalCompletion();
+}
+
+/* Despachar equipe do modal */
+function dispatchFromModal(){
+  if(!currentModalIncident) return;
+  dispatchTeam(currentModalIncident.id);
+  closeMissionModal();
+}
+
+/* Fechar modal */
+function closeMissionModal(){
+  modalOpen = false;
+  if(!resultModalOpen) document.body.classList.remove('paused');
+  currentModalIncident = null;
+  el('missionModal').classList.remove('active');
+}
+
+/* Mostrar modal de resultado */
+function showResultModal(m, success){
+  el('resultTitle').textContent = m.title;
+  
+  // Mostrar status
+  const statusEl = el('resultStatus');
+  if(success){
+    statusEl.textContent = '✅ Missão Concluída com Sucesso!';
+    statusEl.style.background = 'rgba(52,211,153,0.2)';
+    statusEl.style.color = '#34d399';
+  } else {
+    statusEl.textContent = '❌ Missão Falhou';
+    statusEl.style.background = 'rgba(239,68,68,0.2)';
+    statusEl.style.color = '#ef4444';
+  }
+  
+  // Desenhar pentágonos
+  const missionAttb = m.missionAttb || {combt:0, vig:0, mob:0, krism:0, intel:0};
+  const teamAttb = m.teamAttb || {combt:0, vig:0, mob:0, krism:0, intel:0};
+  
+  drawPentagonSVG(missionAttb, 'result-mission-pentagon', 'Requisitos da Missão');
+  drawPentagonSVG(teamAttb, 'result-team-pentagon', 'Atributos da Equipe');
+  
+  // Mostrar taxa de sucesso
+  const successRate = (m.chance * 100).toFixed(1);
+  el('resultSuccessRate').textContent = `${successRate}%`;
+  
+  // Detalhes do resultado
+  const detailsEl = el('resultDetails');
+  if(success){
+    detailsEl.innerHTML = `Reputação: +${3 + m.threat} | XP por herói: +${m.threat * 10}`;
+    detailsEl.style.color = '#34d399';
+  } else {
+    detailsEl.innerHTML = `Reputação: -3 | XP por herói: +${Math.floor(m.threat * 10 / 2)}`;
+    detailsEl.style.color = '#ef4444';
+  }
+  
+  // Mostrar modal
+  resultModalOpen = true;
+  document.body.classList.add('paused');
+  el('resultModal').classList.add('active');
+}
+
+/* Fechar modal de resultado */
+function closeResultModal(){
+  resultModalOpen = false;
+  if(!modalOpen && !levelUpModalOpen) document.body.classList.remove('paused');
+  el('resultModal').classList.remove('active');
+}
+
+/* Mostrar modal de level up */
+function showLevelUpModal(hero){
+  currentLevelUpHero = hero;
+  levelUpModalOpen = true;
+  document.body.classList.add('paused');
+  
+  el('levelUpHeroName').textContent = `${hero.name} alcançou o nível ${hero.level}!`;
+  
+  const attributes = [
+    {key: 'combt', name: 'Combate', icon: '⚔️'},
+    {key: 'vig', name: 'Vigor', icon: '💪'},
+    {key: 'mob', name: 'Mobilidade', icon: '🏃'},
+    {key: 'krism', name: 'Carisma', icon: '✨'},
+    {key: 'intel', name: 'Intelecto', icon: '🧠'}
+  ];
+  
+  const attributesHtml = attributes.map(attr => {
+    const currentValue = hero.attb[attr.key] || 0;
+    return `
+      <button onclick="chooseAttribute('${attr.key}')" 
+              style="padding:16px;background:rgba(125,211,252,0.1);border:2px solid rgba(125,211,252,0.3);border-radius:8px;cursor:pointer;transition:all 0.2s;text-align:center;"
+              onmouseover="this.style.background='rgba(125,211,252,0.2)';this.style.borderColor='var(--accent)'"
+              onmouseout="this.style.background='rgba(125,211,252,0.1)';this.style.borderColor='rgba(125,211,252,0.3)'">
+        <div style="font-size:24px;margin-bottom:4px;">${attr.icon}</div>
+        <div style="font-weight:bold;color:var(--accent);margin-bottom:4px;">${attr.name}</div>
+        <div class="small" style="color:var(--muted);">Atual: ${currentValue}</div>
+      </button>
+    `;
+  }).join('');
+  
+  el('levelUpAttributes').innerHTML = attributesHtml;
+  el('levelUpModal').classList.add('active');
+}
+
+/* Escolher atributo para aumentar */
+function chooseAttribute(attrKey){
+  if(!currentLevelUpHero) return;
+  
+  // Aumentar o atributo em 1
+  if(!currentLevelUpHero.attb[attrKey]){
+    currentLevelUpHero.attb[attrKey] = 1;
+  } else {
+    currentLevelUpHero.attb[attrKey]++;
+  }
+  
+  // Recalcular rating baseado nos atributos e nível
+  const totalAttb = Object.values(currentLevelUpHero.attb).reduce((a, b) => a + b, 0);
+  // Rating base = soma dos atributos * 2.5 + nível * 3
+  currentLevelUpHero.rating = Math.floor(totalAttb * 2.5) + (currentLevelUpHero.level * 3);
+  
+  const attrNames = {
+    combt: 'Combate',
+    vig: 'Vigor',
+    mob: 'Mobilidade',
+    krism: 'Carisma',
+    intel: 'Intelecto'
+  };
+  
+  addLog(`📈 ${currentLevelUpHero.name} aumentou ${attrNames[attrKey]} para ${currentLevelUpHero.attb[attrKey]}!`, 'levelup');
+  
+  // Atualizar display do herói
+  updateHeroes();
+  
+  // Fechar modal
+  closeLevelUpModal();
+}
+
+/* Fechar modal de level up */
+function closeLevelUpModal(){
+  levelUpModalOpen = false;
+  if(!modalOpen && !resultModalOpen) document.body.classList.remove('paused');
+  currentLevelUpHero = null;
+  el('levelUpModal').classList.remove('active');
 }
 
 /* tryAssign: valida disponibilidade e aplica */
@@ -297,12 +1266,32 @@ function dispatchTeam(incId){
   if(!inc) return;
   const assigned = inc.assigned.map(id => id ? heroes.find(h=>h.id===id) : null).filter(Boolean);
   if(assigned.length < 1){ alert('Coloque ao menos 1 herói nos slots antes de enviar.'); return; }
-  // calcular chance
-  const avgRating = assigned.reduce((a,b)=>a+b.rating,0) / assigned.length;
-  const synergy = synergyBonus(assigned);
-  const reqMatch = assigned.some(h=>h.tags.includes(inc.required)) ? 1.2 : 0.9;
-  let chance = (avgRating/100) * synergy * reqMatch * (1 - inc.threat * 0.08);
-  chance = Math.max(0.05, Math.min(0.98, chance));
+  
+  // Calcular porcentagem de completude usando área de interseção dos pentágonos
+  const assignedHeroIds = inc.assigned.filter(Boolean);
+  const missionAttb = getMissionAttributes(inc);
+  const teamAttb = getTeamAttributes(assignedHeroIds);
+  
+  const centerX = 75;
+  const centerY = 75;
+  const radius = 60;
+  
+  // Encontrar o máximo valor entre ambos os conjuntos para usar como escala comum
+  const allValues = [
+    missionAttb.combt, missionAttb.vig, missionAttb.mob, missionAttb.krism, missionAttb.intel,
+    teamAttb.combt, teamAttb.vig, teamAttb.mob, teamAttb.krism, teamAttb.intel
+  ];
+  const maxValue = Math.max(...allValues, 1);
+  
+  // Calcular área da missão usando escala comum
+  const missionArea = calculatePentagonAreaFromAttributes(missionAttb, maxValue, centerX, centerY, radius);
+  
+  // Calcular área de interseção (sobreposição) usando a mesma escala
+  const intersectionArea = calculateIntersectionArea(missionAttb, teamAttb, centerX, centerY, radius);
+  
+  // Usar porcentagem de interseção como chance de sucesso (convertida para 0-1)
+  let chance = missionArea > 0 ? Math.min(0.98, Math.max(0.05, (intersectionArea / missionArea))) : 0.05;
+  
   // mover para ativas
   activeMissions.push({
     id: inc.id,
@@ -311,11 +1300,19 @@ function dispatchTeam(incId){
     start: now(),
     duration: inc.duration,
     team: assigned.map(h=>({id:h.id,name:h.name,rating:h.rating})),
+    missionAttb: missionAttb,
+    teamAttb: teamAttb,
     chance
   });
   // remover incident disponível
   incidents = incidents.filter(i=>i.id !== inc.id);
   renderAll();
+  
+  // Verificar se precisa agendar nova missão (se total < 4)
+  const totalMissions = incidents.length + activeMissions.length;
+  if(totalMissions < 4){
+    addIncidentAfterDelay();
+  }
 }
 
 /* completar missão em andamento */
@@ -333,23 +1330,33 @@ function completeMission(m){
     addLog(`✅ "${m.title}" concluída com sucesso! (chance ${(m.chance*100).toFixed(0)}%)`,'success');
     m.team.forEach(th => { const h = heroes.find(x=>x.id===th.id); if(h) addXP(h,xpGain); });
   } else {
-    reputation -= 3;
+    reputation = Math.max(0, reputation - 3); // Não deixar ficar negativo
     addLog(`❌ "${m.title}" falhou! (chance ${(m.chance*100).toFixed(0)}%)`,'fail');
     m.team.forEach(th => { const h = heroes.find(x=>x.id===th.id); if(h) addXP(h,Math.floor(xpGain/2)); });
   }
   // remover da ativa
   activeMissions = activeMissions.filter(x=>x.id!==m.id);
   renderAll();
+  
+  // Mostrar modal de resultado
+  showResultModal(m, success);
+  
   addIncidentAfterDelay();
 }
 
 /* timers: expiração de incidents e conclusão de missões ativas */
 function checkTimers(){
-  const nowSec = now();
+  // Se game over, não fazer nada
+  if(gameOver) return;
+  
+  // Pausar timers quando qualquer modal estiver aberto
+  if(modalOpen || resultModalOpen || levelUpModalOpen) return;
+  
+  const nowSec = time;
   // incidents expirados
   incidents.filter(i=>nowSec - i.start >= i.duration).forEach(inc=>{
     addLog(`⏰ "${inc.title}" expirou por falta de despacho.`,'fail');
-    reputation -= 2;
+    reputation = Math.max(0, reputation - 2); // Não deixar ficar negativo
     // remover e agendar novo spawn
     incidents = incidents.filter(x=>x.id!==inc.id);
     addIncidentAfterDelay();
@@ -358,21 +1365,39 @@ function checkTimers(){
   activeMissions.filter(m=>nowSec - m.start >= m.duration).forEach(completeMission);
 }
 
-/* spawn novo após delay de 15s */
+/* spawn novo após delay aleatório (entre 10s e 25s) */
 function addIncidentAfterDelay(){
+  // Se já há um spawn agendado, não agendar outro
+  if(incidentSpawnScheduled) return;
+  
+  // Verificar se já temos 4 missões
+  const totalMissions = incidents.length + activeMissions.length;
+  if(totalMissions >= 4) return;
+  
+  // Marcar como agendado
+  incidentSpawnScheduled = true;
+  
+  // Tempo aleatório entre 10 e 25 segundos
+  const delay = 10000 + Math.random() * 15000;
   setTimeout(()=>{
-    if(incidents.length < 3){
+    // Verificar novamente se há menos de 4 missões no total (disponíveis + em andamento)
+    const totalMissions = incidents.length + activeMissions.length;
+    if(totalMissions < 4){
       incidents.push(newIncident());
       renderAll();
       addLog('🆕 Nova missão entrou na lista.','');
     }
-  },15000);
+    
+    // Liberar flag e agendar próxima missão se necessário
+    incidentSpawnScheduled = false;
+    addIncidentAfterDelay();
+  }, delay);
 }
 
 /* render ativos */
 function renderActiveMissions(){
   el('activeMissionsList').innerHTML = activeMissions.map(m=>{
-    const elapsed = now() - m.start;
+    const elapsed = time - m.start;
     const pct = Math.max(0, 100 - (elapsed / m.duration) * 100);
     const color = getTimerColor(m.threat);
     return `<div class="incident">
@@ -383,18 +1408,108 @@ function renderActiveMissions(){
   }).join('') || '<div class="small">Nenhuma missão em andamento.</div>';
 }
 
+/* Verificar game over */
+function checkGameOver(){
+  if(reputation <= 0 && !gameOver){
+    reputation = 0; // Garantir que não fique negativo
+    gameOver = true;
+    showGameOverModal();
+  }
+}
+
+/* Mostrar modal de game over */
+function showGameOverModal(){
+  document.body.classList.add('paused');
+  el('gameOverModal').classList.add('active');
+}
+
+/* Reiniciar jogo */
+function restartGame(){
+  // Resetar todas as variáveis do jogo
+  reputation = 20;
+  gameOver = false;
+  time = now();
+  log = [];
+  incidents = [];
+  activeMissions = [];
+  nextIncidentId = 1;
+  incidentSpawnScheduled = false;
+  modalOpen = false;
+  resultModalOpen = false;
+  levelUpModalOpen = false;
+  currentModalIncident = null;
+  currentLevelUpHero = null;
+  
+  // Resetar heróis - restaurar atributos iniciais
+  heroes.forEach(hero => {
+    const initial = initialHeroAttributes.find(h => h.id === hero.id);
+    if(initial){
+      // Restaurar atributos iniciais
+      hero.attb = {...initial.attb};
+      hero.rating = initial.rating;
+    }
+    hero.level = 1;
+    hero.xp = 0;
+    hero.cooldown = 0;
+  });
+  
+  // Fechar todos os modais
+  el('gameOverModal').classList.remove('active');
+  el('missionModal').classList.remove('active');
+  el('resultModal').classList.remove('active');
+  el('levelUpModal').classList.remove('active');
+  document.body.classList.remove('paused');
+  
+  // Reinicializar
+  const initialMissions = Math.min(3, 4);
+  for(let i=0;i<initialMissions;i++) incidents.push(newIncident());
+  addIncidentAfterDelay();
+  initHeroes();
+  loadMapImage();
+  renderAll();
+  
+  addLog('🔄 Jogo reiniciado!', '');
+}
+
 /* render geral */
-function renderReputation(){ el('repValue').textContent = reputation; }
+function renderReputation(){ 
+  el('repValue').textContent = reputation; 
+  // Verificar game over sempre que a reputação é renderizada
+  checkGameOver();
+}
 function renderAll(){
-  renderHeroes();
+  updateHeroes();
   renderIncidents();
   renderActiveMissions();
   renderLog();
   renderReputation();
+  
+  // Atualizar modal se estiver aberto
+  if(modalOpen && currentModalIncident){
+    const inc = incidents.find(i => i.id === currentModalIncident.id);
+    if(inc){
+      currentModalIncident = inc; // Atualizar referência
+      el('modalThreat').textContent = `Ameaça: ${inc.threat} • Tempo restante: ${Math.max(0, Math.ceil((inc.duration - (time - inc.start)) / 1))}s`;
+      updateModalCompletion();
+    } else {
+      // Missão foi removida (expirada ou despachada)
+      closeMissionModal();
+    }
+  }
 }
 
 /* loop principal */
 function tick(){
+  // Se game over, não fazer nada
+  if(gameOver) return;
+  
+  // Se qualquer modal estiver aberto, pausar completamente (não atualizar time nem renderizar)
+  if(modalOpen || resultModalOpen || levelUpModalOpen){
+    // Não fazer nada - o jogo está pausado
+    return;
+  }
+  
+  // Atualizar o tempo do jogo normalmente
   time = now();
   checkTimers();
   // re-render components; incidents mantém assigned[] portanto slots não perdem estado
@@ -403,12 +1518,51 @@ function tick(){
 setInterval(tick,1000);
 
 /* inicializar */
-for(let i=0;i<3;i++) incidents.push(newIncident());
-renderAll();
+// Iniciar com algumas missões (máximo 4)
+const initialMissions = Math.min(3, 4);
+for(let i=0;i<initialMissions;i++) incidents.push(newIncident());
+// Agendar primeira missão após inicialização
+addIncidentAfterDelay();
+initHeroes(); // Cria elementos HTML apenas uma vez
+loadMapImage(); // Tentar carregar imagem do mapa
+renderAll(); // Atualiza valores dinâmicos
+
+// Fechar modal ao clicar no overlay
+el('missionModal').addEventListener('click', (e) => {
+  if(e.target.id === 'missionModal'){
+    closeMissionModal();
+  }
+});
+
+// Fechar modal de resultado ao clicar no overlay
+el('resultModal').addEventListener('click', (e) => {
+  if(e.target.id === 'resultModal'){
+    closeResultModal();
+  }
+});
+
+// Fechar modal de level up ao clicar no overlay
+el('levelUpModal').addEventListener('click', (e) => {
+  if(e.target.id === 'levelUpModal'){
+    closeLevelUpModal();
+  }
+});
+
+// O modal de game over não fecha ao clicar no overlay (só reinicia)
 
 /* expor funções para botões inline */
 window.dispatchTeam = dispatchTeam;
 window.clearSlots = clearSlots;
+window.rollout = rollout;
+window.openMissionModal = openMissionModal;
+window.closeMissionModal = closeMissionModal;
+window.clearModalSlots = clearModalSlots;
+window.dispatchFromModal = dispatchFromModal;
+window.removeFromModalSlot = removeFromModalSlot;
+window.closeResultModal = closeResultModal;
+window.chooseAttribute = chooseAttribute;
+window.closeLevelUpModal = closeLevelUpModal;
+window.restartGame = restartGame;
 </script>
 </body>
 </html>
